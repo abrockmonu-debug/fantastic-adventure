@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Coin Merge 2048</title>
+<style>
+body {
+    background-color: #faf8ef;
+    font-family: Arial, sans-serif;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100vh;
+    margin: 0;
+}
+
+#game-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+h1 {
+    font-size: 50px;
+    color: #776e65;
+    margin: 0;
+    margin-bottom: 10px;
+}
+
+#info-container {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 400px;
+    margin-bottom: 20px;
+}
+
+#score-container {
+    background-color: #bbada0;
+    color: white;
+    padding: 10px 20px;
+    border-radius: 5px;
+    text-align: center;
+}
+
+#score-label {
+    font-size: 15px;
+}
+
+#score-value {
+    font-size: 25px;
+    font-weight: bold;
+}
+
+.button {
+    background-color: #8f7a66;
+    color: white;
+    padding: 10px 20px;
+    border: none;
+    border-radius: 5px;
+    font-size: 1em;
+    cursor: pointer;
+    user-select: none;
+    transition: background-color 0.2s;
+}
+
+#control-buttons {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 20px;
+}
+
+#game-canvas {
+    border: 10px solid #bbada0;
+    background-color: #cdc1b4;
+    border-radius: 6px;
+}
+
+#game-over-overlay {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background-color: rgba(255, 255, 255, 0.7);
+    color: #776e65;
+    padding: 20px;
+    border-radius: 10px;
+    text-align: center;
+    font-size: 2em;
+    font-weight: bold;
+    display: none;
+    flex-direction: column;
+}
+
+#keyboard-controls {
+    margin-top: 20px;
+    background-color: #bbada0;
+    color: white;
+    padding: 15px;
+    border-radius: 5px;
+    text-align: left;
+    display: none; /* Initially hidden */
+    width: 370px;
+}
+
+#keyboard-controls h3 {
+    margin-top: 0;
+}
+
+#keyboard-controls p {
+    margin: 5px 0;
+}
+
+.powerup-button {
+    background-color: #8f7a66;
+    color: white;
+    padding: 8px 15px;
+    border-radius: 5px;
+    font-weight: bold;
+    cursor: pointer;
+    user-select: none;
+    transition: background-color 0.2s;
+}
+.powerup-button.active {
+    background-color: #bbada0;
+}
+</style>
+</head>
+<body>
+
+<div id="game-container">
+    <h1>Coin 2048</h1>
+    <div id="info-container">
+        <div id="score-container">
+            <div id="score-label">SCORE</div>
+            <div id="score-value">0</div>
+        </div>
+        <button id="new-game-button" class="button">New Game</button>
+    </div>
+    
+    <div id="control-buttons">
+        <button id="show-keyboard-button" class="button">Show Keyboard</button>
+        <div id="powerups-container">
+            <div id="swap-powerup" class="powerup-button">Swap (S)</div>
+            <div id="destroy-powerup" class="powerup-button">Destroy (D)</div>
+            <div id="undo-powerup" class="powerup-button">Undo (U)</div>
+        </div>
+    </div>
+
+    <canvas id="game-canvas" width="480" height="480"></canvas>
+
+    <div id="keyboard-controls">
+        <h3>Keyboard Controls</h3>
+        <p><strong>Move:</strong></p>
+        <p>▲ or <strong>W</strong> = Up</p>
+        <p>◄ or <strong>A</strong> = Left</p>
+        <p>▼ or <strong>S</strong> = Down</p>
+        <p>► or <strong>D</strong> = Right</p>
+        <hr>
+        <p><strong>Power-ups:</strong></p>
+        <p><strong>S</strong> = Swap (click two tiles)</p>
+        <p><strong>D</strong> = Destroy (click one tile)</p>
+        <p><strong>U</strong> = Undo (revert last move)</p>
+    </div>
+    
+    <div id="game-over-overlay">
+        Game Over!
+        <button class="button" onclick="initGame()">Try Again</button>
+    </div>
+</div>
+
+<script>
+const canvas = document.getElementById('game-canvas');
+const ctx = canvas.getContext('2d');
+const gridSize = 4;
+const tileSize = 100;
+const tileSpacing = 16;
+let score = 0;
+let grid = [];
+let gameWon = false;
+let gameOver = false;
+let history = [];
+
+let powerups = {
+    swap: 1,
+    destroy: 1,
+    undo: 1
+};
+let activePowerup = null;
+
+const scoreValue = document.getElementById('score-value');
+const gameOverOverlay = document.getElementById('game-over-overlay');
+const newGameButton = document.getElementById('new-game-button');
+const showKeyboardButton = document.getElementById('show-keyboard-button');
+const keyboardControls = document.getElementById('keyboard-controls');
+const swapButton = document.getElementById('swap-powerup');
+const destroyButton = document.getElementById('destroy-powerup');
+const undoButton = document.getElementById('undo-powerup');
+
+const tileColors = {
+    2: '#eee4da', 4: '#ede0c8', 8: '#f2b179', 16: '#f59563',
+    32: '#f67c5f', 64: '#f65e3b', 128: '#edcf72', 256: '#edcc61',
+    512: '#edc850', 1024: '#edc53f', 2048: '#edc22e'
+};
+
+const tileLabels = {
+    2: 'Penny', 4: 'Nickel', 8: 'Dime', 16: 'Quarter',
+    32: '50p', 64: '1£', 128: '2£', 256: '5£',
+    512: '10£', 1024: '20£', 2048: '50£'
+};
+
+function initGame() {
+    grid = Array.from({ length: gridSize }, () => Array(gridSize).fill(0));
+    score = 0;
+    scoreValue.textContent = score;
+    gameWon = false;
+    gameOver = false;
+    history = [];
+    powerups = { swap: 1, destroy: 1, undo: 1 };
+    activePowerup = null;
+    gameOverOverlay.style.display = 'none';
+    updatePowerupButtons();
+    
+    addRandomTile();
+    addRandomTile();
+    drawGrid();
+}
+
+function updatePowerupButtons() {
+    swapButton.textContent = `Swap (S) [${powerups.swap}]`;
+    destroyButton.textContent = `Destroy (D) [${powerups.destroy}]`;
+    undoButton.textContent = `Undo (U) [${powerups.undo}]`;
+}
+
+function drawGrid() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    for (let r = 0; r < gridSize; r++) {
+        for (let c = 0; c < gridSize; c++) {
+            drawTile(grid[r][c], c, r);
+        }
+    }
+}
+
+function drawTile(value, c, r) {
+    const x = c * (tileSize + tileSpacing) + tileSpacing;
+    const y = r * (tileSize + tileSpacing) + tileSpacing;
+    const color = tileColors[value] || '#cdc1b4';
+    
+    ctx.beginPath();
+    ctx.roundRect(x, y, tileSize, tileSize, 5);
+    ctx.fillStyle = color;
+    ctx.fill();
+    
+    if (value !== 0) {
+        ctx.fillStyle = (value > 4) ? '#f9f6f2' : '#776e65';
+        ctx.font = 'bold ' + (value < 1000 ? '40px' : '30px') + ' Arial';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(value, x + tileSize / 2, y + tileSize / 2);
+    }
+}
+
+function addRandomTile() {
+    const emptyCells = [];
+    for (let r = 0; r < gridSize; r++) {
+        for (let c = 0; c < gridSize; c++) {
+            if (grid[r][c] === 0) {
+                emptyCells.push({ r, c });
+            }
+        }
+    }
+
+    if (emptyCells.length > 0) {
+        const { r, c } = emptyCells[Math.floor(Math.random() * emptyCells.length)];
+        grid[r][c] = Math.random() < 0.9 ? 2 : 4;
+    }
+}
+
+function saveState() {
+    history.push({
+        grid: JSON.parse(JSON.stringify(grid)),
+        score: score,
+        powerups: JSON.parse(JSON.stringify(powerups))
+    });
+    if (history.length > 5) history.shift();
+}
+
+function undoLastMove() {
+    if (history.length > 0) {
+        const lastState = history.pop();
+        grid = lastState.grid;
+        score = lastState.score;
+        powerups = lastState.powerups;
+        drawGrid();
+        updatePowerupButtons();
+    }
+}
+
+function slide(row) {
+    let arr = row.filter(val => val !== 0);
+    let missing = gridSize - arr.length;
+    let zeros = Array(missing).fill(0);
+    arr = zeros.concat(arr);
+    return arr;
+}
+
+function combine(row) {
+    for (let i = gridSize - 1; i > 0; i--) {
+        let a = row[i];
+        let b = row[i - 1];
+        if (a === b && a !== 0) {
+            row[i] = a + b;
+            score += row[i];
+            row[i - 1] = 0;
+            if (row[i] === 2048) gameWon = true;
+        }
+    }
+    return row;
+}
+
+function operate(row) {
+    row = slide(row);
+    row = combine(row);
+    row = slide(row);
+    return row;
+}
+
+function transpose(matrix) {
+    return matrix[0].map((_, colIndex) => matrix.map(row => row[colIndex]));
+}
+
+function flip(matrix) {
+    return matrix.map(row => row.reverse());
+}
+
+function move(dir) {
+    if (gameOver) return;
+    saveState();
+    let oldGrid = JSON.parse(JSON.stringify(grid));
+    let hasChanged = false;
+
+    if (dir === 'up') {
+        grid = transpose(grid);
+        for (let i = 0; i < gridSize; i++) {
+            grid[i] = operate(grid[i]);
+        }
+        grid = transpose(grid);
+    } else if (dir === 'down') {
+        grid = transpose(grid);
+        grid = flip(grid);
+        for (let i = 0; i < gridSize; i++) {
+            grid[i] = operate(grid[i]);
+        }
+        grid = flip(grid);
+        grid = transpose(grid);
+    } else if (dir === 'left') {
+        for (let i = 0; i < gridSize; i++) {
+            grid[i] = operate(grid[i].reverse()).reverse();
+        }
+    } else if (dir === 'right') {
+        for (let i = 0; i < gridSize; i++) {
+            grid[i] = operate(grid[i]);
+        }
+    }
+
+    if (JSON.stringify(oldGrid) !== JSON.stringify(grid)) {
+        addRandomTile();
+        drawGrid();
+        checkGameOver();
+        scoreValue.textContent = score;
+    }
+}
+
+function checkGameOver() {
+    for (let r = 0; r < gridSize; r++) {
+        for (let c = 0; c < gridSize; c++) {
+            if (grid[r][c] === 0) return; // Not game over if there's an empty cell
+            
+            // Check for adjacent same tiles
+            if (r < gridSize - 1 && grid[r][c] === grid[r + 1][c]) return;
+            if (c < gridSize - 1 && grid[r][c] === grid[r][c + 1]) return;
+        }
+    }
+    gameOver = true;
+    gameOverOverlay.style.display = 'flex';
+}
+
+function handlePowerupClick(event) {
+    const rect = canvas.getBoundingClientRect();
+    const x = event.clientX - rect.left;
+    const y = event.clientY - rect.top;
+    
+    const c = Math.floor((x - tileSpacing) / (tileSize + tileSpacing));
+    const r = Math.floor((y - tileSpacing) / (tileSize + tileSpacing));
+    
+    if (c >= 0 && c < gridSize && r >= 0 && r < gridSize) {
+        if (activePowerup === 'destroy') {
+            if (grid[r][c] !== 0) {
+                grid[r][c] = 0;
+                powerups.destroy--;
+                activePowerup = null;
+                drawGrid();
+                updatePowerupButtons();
+                canvas.style.cursor = 'default';
+            }
+        } else if (activePowerup === 'swap') {
+            if (!swapTiles.tile1) {
+                swapTiles.tile1 = { r, c };
+                // Highlighting logic can be added here
+            } else {
+                swapTiles.tile2 = { r, c };
+                let val1 = grid[swapTiles.tile1.r][swapTiles.tile1.c];
+                let val2 = grid[swapTiles.tile2.r][swapTiles.tile2.c];
+                grid[swapTiles.tile1.r][swapTiles.tile1.c] = val2;
+                grid[swapTiles.tile2.r][swapTiles.tile2.c] = val1;
+                powerups.swap--;
+                activePowerup = null;
+                swapTiles = { tile1: null, tile2: null };
+                drawGrid();
+                updatePowerupButtons();
+                canvas.style.cursor = 'default';
+            }
+        }
+    }
+}
+
+let swapTiles = { tile1: null, tile2: null };
+
+swapButton.addEventListener('click', () => {
+    if (powerups.swap > 0) {
+        activePowerup = 'swap';
+        canvas.style.cursor = 'crosshair';
+        swapTiles = { tile1: null, tile2: null };
+    }
+});
+
+destroyButton.addEventListener('click', () => {
+    if (powerups.destroy > 0) {
+        activePowerup = 'destroy';
+        canvas.style.cursor = 'crosshair';
+    }
+});
+
+undoButton.addEventListener('click', () => {
+    if (powerups.undo > 0) {
+        undoLastMove();
+        powerups.undo--;
+        updatePowerupButtons();
+    }
+});
+
+showKeyboardButton.addEventListener('click', () => {
+    keyboardControls.style.display = keyboardControls.style.display === 'block' ? 'none' : 'block';
+});
+
+canvas.addEventListener('click', handlePowerupClick);
+
+newGameButton.addEventListener('click', initGame);
+
+document.addEventListener('keydown', (e) => {
+    let keyHandled = true;
+    switch (e.key) {
+        case 'ArrowUp':
+        case 'w':
+            move('up');
+            break;
+        case 'ArrowDown':
+        case 's':
+            move('down');
+            break;
+        case 'ArrowLeft':
+        case 'a':
+            move('left');
+            break;
+        case 'ArrowRight':
+        case 'd':
+            move('right');
+            break;
+        case 'S':
+            if (powerups.swap > 0) {
+                activePowerup = 'swap';
+                canvas.style.cursor = 'crosshair';
+                swapTiles = { tile1: null, tile2: null };
+            }
+            break;
+        case 'D':
+            if (powerups.destroy > 0) {
+                activePowerup = 'destroy';
+                canvas.style.cursor = 'crosshair';
+            }
+            break;
+        case 'U':
+            if (powerups.undo > 0) {
+                undoLastMove();
+                powerups.undo--;
+                updatePowerupButtons();
+            }
+            break;
+        default:
+            keyHandled = false;
+    }
+    if (keyHandled) {
+        e.preventDefault(); // Prevents default browser actions
+    }
+});
+
+initGame();
+</script>
+
+</body>
+</html>
